@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Калькулятор СМО M/M/2/R с гистерезисными порогами</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f5f5f0;
+    color: #2c2c2a;
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 6px;
+  }
+  .subtitle {
+    color: #5f5e5a;
+    font-size: 14px;
+    margin: 0 0 24px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+  }
+  .card {
+    background: white;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card h2 {
+    font-size: 15px;
+    font-weight: 500;
+    margin: 0 0 16px;
+    color: #444441;
+  }
+  .slider-row {
+    margin-bottom: 18px;
+  }
+  .slider-row:last-child { margin-bottom: 0; }
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+  .slider-label .name {
+    color: #2c2c2a;
+    font-weight: 500;
+  }
+  .slider-label .desc {
+    color: #888780;
+    font-size: 12px;
+  }
+  .slider-label .value {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: #185fa5;
+    font-weight: 500;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: #534ab7;
+  }
+  .results {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .result {
+    background: #f1efe8;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .result .label {
+    font-size: 11px;
+    color: #5f5e5a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .result .value {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 17px;
+    font-weight: 500;
+    color: #2c2c2a;
+  }
+  .result.highlight {
+    background: #e6f1fb;
+  }
+  .result.highlight .value {
+    color: #0c447c;
+  }
+  .result.warn {
+    background: #fceaf0;
+  }
+  .result.warn .value {
+    color: #993556;
+  }
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .chart-wrap {
+    background: white;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .chart-wrap h3 {
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0 0 8px;
+    color: #444441;
+  }
+  .error {
+    background: #fceaf0;
+    color: #993556;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 12px;
+    display: none;
+  }
+  .error.show { display: block; }
+  .footer {
+    margin-top: 16px;
+    font-size: 12px;
+    color: #888780;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: #f1efe8;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+    .charts { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Калькулятор СМО M/M/2/R с гистерезисными порогами (L, N)</h1>
+  <p class="subtitle">
+    Двухканальная марковская система с конечной очередью R и
+    гистерезисным управлением вторым сервером. Состояние η(t) = (ξ(t), ν(t)),
+    где ξ — индикатор работы 2-го сервера (0/1), ν — число заявок в системе.
+    1-й сервер активен всегда. При ξ=0 допустимы j ∈ {0,…,N}, при ξ=1 — j ∈ {L+1,…,R}.
+  </p>
+
+  <div class="layout">
+    <!-- Левая колонка: ползунки -->
+    <div class="card">
+      <h2>Параметры системы</h2>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span><span class="name">λ</span>
+            <span class="desc">— интенсивность потока</span></span>
+          <span class="value" id="lam-val">3.00</span>
+        </div>
+        <input type="range" id="lam" min="0.1" max="10" step="0.1" value="3.0">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span><span class="name">μ</span>
+            <span class="desc">— интенсивность обслуживания</span></span>
+          <span class="value" id="mu-val">2.00</span>
+        </div>
+        <input type="range" id="mu" min="0.1" max="10" step="0.1" value="2.0">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span><span class="name">L</span>
+            <span class="desc">— порог выключения 2-го прибора</span></span>
+          <span class="value" id="L-val">2</span>
+        </div>
+        <input type="range" id="L" min="0" max="10" step="1" value="2">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span><span class="name">N</span>
+            <span class="desc">— порог включения 2-го прибора</span></span>
+          <span class="value" id="N-val">6</span>
+        </div>
+        <input type="range" id="N" min="2" max="15" step="1" value="6">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span><span class="name">R</span>
+            <span class="desc">— ёмкость системы</span></span>
+          <span class="value" id="r-val">10</span>
+        </div>
+        <input type="range" id="r" min="3" max="40" step="1" value="10">
+      </div>
+
+      <div class="footer">
+        Условия: <code>N &gt; L ≥ 0</code>, <code>R &gt; N</code>.<br>
+        Стабильность не требуется (система с конечным буфером).
+      </div>
+    </div>
+
+    <!-- Правая колонка: результаты + графики -->
+    <div>
+      <div class="card" style="margin-bottom: 16px;">
+        <h2>Характеристики системы</h2>
+        <div class="error" id="err"></div>
+        <div class="results">
+          <div class="result warn">
+            <div class="label">π — вероятность потери</div>
+            <div class="value" id="pi-val">—</div>
+          </div>
+          <div class="result highlight">
+            <div class="label">W — ср. время ожидания</div>
+            <div class="value" id="W-val">—</div>
+          </div>
+          <div class="result highlight">
+            <div class="label">T — ср. время в системе</div>
+            <div class="value" id="T-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">n — заявок в системе</div>
+            <div class="value" id="n-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">Q — заявок в очереди</div>
+            <div class="value" id="Q-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">U₂ — загрузка 2-го прибора</div>
+            <div class="value" id="U2-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">λ_eff = λ(1−π)</div>
+            <div class="value" id="leff-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">P{w=0} — без ожидания</div>
+            <div class="value" id="pw0-val">—</div>
+          </div>
+          <div class="result">
+            <div class="label">контроль T = W+1/μ</div>
+            <div class="value" id="check-val" style="font-size: 13px;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-wrap">
+          <h3>Распределение стационарных вероятностей</h3>
+          <canvas id="distCanvas" width="500" height="280"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <h3>W(R) и T(R) — зависимость от ёмкости</h3>
+          <canvas id="curveCanvas" width="500" height="280"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Решение модели M/M/2/r с порогами L, N
+// Возвращает {p10, p11, pi, n, Q, n_s, U2, lam_eff, W, T, p_immediate}
+// ============================================================
+function solveMM2R(lam, mu, L, N, r) {
+  if (!(N > L && L >= 0 && r > N)) {
+    throw new Error('Должно быть r > N > L ≥ 0');
+  }
+  const rho = lam / mu;
+  const halfRho = lam / (2 * mu);
+
+  // a(n) с мемоизацией
+  const aMemo = {};
+  function a(n) {
+    if (n in aMemo) return aMemo[n];
+    if (n === 0) return aMemo[n] = 0;
+    return aMemo[n] = lam / (lam + mu - mu * a(n - 1));
+  }
+
+  // b(n)
+  const bMemo = {};
+  function b(n) {
+    if (n in bMemo) return bMemo[n];
+    if (n === 0) return bMemo[n] = 0;
+    if (n === 1) return bMemo[n] = 1;
+    return bMemo[n] = ((lam + 2 * mu) * b(n - 1) - lam * b(n - 2)) / (2 * mu);
+  }
+
+  // Произведение a(N-L-1)·...·a(m)
+  function prodADownTo(m) {
+    let p = 1;
+    for (let i = N - L - 1; i >= m; i--) p *= a(i);
+    return p;
+  }
+
+  // k1 — корректно и для L = 0
+  const k1 = ((lam + mu) * Math.pow(rho, L)
+              - lam * Math.pow(rho, L - 1)
+              - mu * a(N - L - 1) * Math.pow(rho, L)) / (2 * mu);
+
+  const k2 = ((lam + 2 * mu) * b(N - L) * k1
+              - lam * prodADownTo(1) * Math.pow(rho, L)
+              - lam * b(N - L - 1) * k1) / (2 * mu);
+
+  // c(n)
+  const cMemo = {};
+  function c(n) {
+    if (n in cMemo) return cMemo[n];
+    if (n === 0) return cMemo[n] = b(N - L) * k1;
+    if (n === 1) return cMemo[n] = k2;
+    return cMemo[n] = ((lam + 2 * mu) * c(n - 1) - lam * c(n - 2)) / (2 * mu);
+  }
+
+  // Коэффициенты при p_(1,0,0)
+  const p10c = new Array(N).fill(0);
+  for (let i = 0; i <= L; i++) p10c[i] = Math.pow(rho, i);
+  for (let i = L + 1; i < N; i++)
+    p10c[i] = Math.pow(rho, L) * prodADownTo(N - i);
+
+  const p11c = {};
+  p11c[L + 1] = k1;
+  for (let i = L + 2; i <= N; i++) p11c[i] = b(i - L) * k1;
+  p11c[N + 1] = k2;
+  for (let i = N + 2; i < r; i++) p11c[i] = c(i - N);
+  p11c[r] = halfRho * c(r - N - 1);
+
+  let S = 0;
+  for (const v of p10c) S += v;
+  for (const k in p11c) S += p11c[k];
+  const p100 = 1 / S;
+
+  const p10 = p10c.map(v => v * p100);
+  const p11 = {};
+  for (const k in p11c) p11[k] = p11c[k] * p100;
+
+  const pi = p11[r];
+  let n = 0, Q = 0, n_s = 0, U2 = 0;
+  for (let i = 0; i < N; i++) {
+    n += i * p10[i];
+    if (i >= 1) {
+      Q += (i - 1) * p10[i];
+      n_s += p10[i];
+    }
+  }
+  for (const k in p11) {
+    const i = +k;
+    n += i * p11[i];
+    Q += (i - 2) * p11[i];
+    n_s += 2 * p11[i];
+    U2 += p11[i];
+  }
+  const p_immediate = p10[0] + (N >= 2 ? p10[N - 1] : 0);
+  const lam_eff = lam * (1 - pi);
+  const W = Q / lam_eff;
+  const T = n / lam_eff;
+
+  // Проверка отрицательных вероятностей (численная нестабильность)
+  let allNonNeg = p10.every(v => v >= -1e-9) &&
+                  Object.values(p11).every(v => v >= -1e-9);
+  if (!allNonNeg) {
+    throw new Error('Численная нестабильность: получены отрицательные вероятности. Попробуйте другие параметры.');
+  }
+
+  return { p10, p11, pi, n, Q, n_s, U2, lam_eff, W, T, p_immediate };
+}
+
+// ============================================================
+// Отрисовка графиков
+// ============================================================
+const PURPLE = '#7F77DD', PURPLE_DARK = '#3C3489';
+const TEAL = '#1D9E75', TEAL_DARK = '#085041';
+const RED = '#A32D2D';
+const ORANGE = '#D85A30';
+const BLUE = '#185FA5';
+const GRAY = '#888780';
+
+function drawDistribution(res, L, N, r) {
+  const cv = document.getElementById('distCanvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Собрать массив: (label, p, color)
+  const bars = [];
+  for (let j = 0; j < N; j++)
+    bars.push({ lbl: `(0,${j})`, p: res.p10[j], col: PURPLE, dark: PURPLE_DARK });
+  const keys = Object.keys(res.p11).map(Number).sort((a, b) => a - b);
+  for (const j of keys) {
+    const isLoss = (j === r);
+    bars.push({
+      lbl: `(1,${j})`,
+      p: res.p11[j],
+      col: isLoss ? RED : TEAL,
+      dark: isLoss ? '#501313' : TEAL_DARK
+    });
+  }
+
+  const padL = 30, padR = 10, padT = 14, padB = 50;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const maxP = Math.max(...bars.map(b => b.p), 0.01);
+  const barW = innerW / bars.length * 0.85;
+  const step = innerW / bars.length;
+
+  // Оси Y (4 деления)
+  ctx.strokeStyle = '#e0e0d8';
+  ctx.fillStyle = '#888780';
+  ctx.font = '10px ui-monospace, monospace';
+  ctx.textAlign = 'right';
+  for (let k = 0; k <= 4; k++) {
+    const v = maxP * k / 4;
+    const y = padT + innerH - (v / maxP) * innerH;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillText(v.toFixed(2), padL - 4, y + 3);
+  }
+
+  // Столбцы
+  bars.forEach((b, idx) => {
+    const x = padL + idx * step + (step - barW) / 2;
+    const h = (b.p / maxP) * innerH;
+    const y = padT + innerH - h;
+    ctx.fillStyle = b.col;
+    ctx.fillRect(x, y, barW, h);
+    ctx.strokeStyle = b.dark;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x, y, barW, h);
+  });
+
+  // Подписи (через одну, если много)
+  ctx.fillStyle = '#5f5e5a';
+  ctx.font = '9px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  const stepLabel = bars.length > 12 ? 2 : 1;
+  bars.forEach((b, idx) => {
+    if (idx % stepLabel !== 0 && idx !== bars.length - 1) return;
+    const x = padL + idx * step + step / 2;
+    ctx.save();
+    ctx.translate(x, H - padB + 8);
+    ctx.rotate(-Math.PI / 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(b.lbl, 0, 0);
+    ctx.restore();
+  });
+
+  // Легенда
+  const legY = H - 14;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PURPLE;
+  ctx.fillRect(padL, legY - 8, 10, 10);
+  ctx.fillStyle = '#444441';
+  ctx.fillText('ξ=0 (1 сервер)', padL + 14, legY);
+  ctx.fillStyle = TEAL;
+  ctx.fillRect(padL + 120, legY - 8, 10, 10);
+  ctx.fillStyle = '#444441';
+  ctx.fillText('ξ=1 (2 сервера)', padL + 134, legY);
+  ctx.fillStyle = RED;
+  ctx.fillRect(padL + 245, legY - 8, 10, 10);
+  ctx.fillStyle = '#444441';
+  ctx.fillText('потеря', padL + 259, legY);
+}
+
+function drawCurves(lam, mu, L, N, currentR) {
+  const cv = document.getElementById('curveCanvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Считаем W(r) и T(r) для r = N+2 .. N+25
+  const rMin = N + 2;
+  const rMax = N + 25;
+  const Ws = [], Ts = [], rs = [];
+  for (let r = rMin; r <= rMax; r++) {
+    try {
+      const res = solveMM2R(lam, mu, L, N, r);
+      rs.push(r);
+      Ws.push(res.W);
+      Ts.push(res.T);
+    } catch (e) { /* пропустить */ }
+  }
+  if (rs.length < 2) return;
+
+  const padL = 38, padR = 12, padT = 14, padB = 40;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const yMax = Math.max(...Ts) * 1.1;
+  const yMin = 0;
+
+  // Сетка Y
+  ctx.strokeStyle = '#e0e0d8';
+  ctx.fillStyle = '#888780';
+  ctx.font = '10px ui-monospace, monospace';
+  ctx.textAlign = 'right';
+  for (let k = 0; k <= 4; k++) {
+    const v = yMin + (yMax - yMin) * k / 4;
+    const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillText(v.toFixed(2), padL - 4, y + 3);
+  }
+
+  // Подписи X
+  ctx.textAlign = 'center';
+  const xStep = innerW / (rs.length - 1);
+  for (let i = 0; i < rs.length; i += Math.ceil(rs.length / 7)) {
+    const x = padL + i * xStep;
+    ctx.fillText(rs[i], x, H - padB + 14);
+  }
+  ctx.fillText('R', padL + innerW / 2, H - padB + 28);
+
+  function plotLine(arr, color, lw) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    arr.forEach((v, i) => {
+      const x = padL + i * xStep;
+      const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Точки
+    ctx.fillStyle = color;
+    arr.forEach((v, i) => {
+      const x = padL + i * xStep;
+      const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  plotLine(Ws, ORANGE, 2);
+  plotLine(Ts, BLUE, 2);
+
+  // Маркер текущего r
+  const idx = rs.indexOf(currentR);
+  if (idx >= 0) {
+    const x = padL + idx * xStep;
+    ctx.strokeStyle = '#444441';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + innerH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#444441';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('R = ' + currentR, x, padT + 10);
+  }
+
+  // Легенда
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = ORANGE;
+  ctx.fillRect(padL + 4, padT + 4, 10, 3);
+  ctx.fillStyle = '#444441';
+  ctx.fillText('W(R)', padL + 18, padT + 9);
+  ctx.fillStyle = BLUE;
+  ctx.fillRect(padL + 60, padT + 4, 10, 3);
+  ctx.fillStyle = '#444441';
+  ctx.fillText('T(R)', padL + 74, padT + 9);
+}
+
+// ============================================================
+// Связывание UI
+// ============================================================
+const ids = ['lam', 'mu', 'L', 'N', 'r'];
+ids.forEach(id => {
+  document.getElementById(id).addEventListener('input', update);
+});
+
+function update() {
+  const lam = parseFloat(document.getElementById('lam').value);
+  const mu = parseFloat(document.getElementById('mu').value);
+  let L = parseInt(document.getElementById('L').value);
+  let N = parseInt(document.getElementById('N').value);
+  let r = parseInt(document.getElementById('r').value);
+
+  // Автокоррекция: гарантируем r > N > L
+  if (N <= L) {
+    N = L + 1;
+    document.getElementById('N').value = N;
+  }
+  if (r <= N) {
+    r = N + 1;
+    document.getElementById('r').value = r;
+  }
+
+  document.getElementById('lam-val').textContent = lam.toFixed(2);
+  document.getElementById('mu-val').textContent = mu.toFixed(2);
+  document.getElementById('L-val').textContent = L;
+  document.getElementById('N-val').textContent = N;
+  document.getElementById('r-val').textContent = r;
+
+  const errEl = document.getElementById('err');
+  try {
+    const res = solveMM2R(lam, mu, L, N, r);
+    errEl.classList.remove('show');
+
+    const fmt = (x, d=4) => x.toFixed(d);
+    document.getElementById('pi-val').textContent = fmt(res.pi);
+    document.getElementById('W-val').textContent = fmt(res.W);
+    document.getElementById('T-val').textContent = fmt(res.T);
+    document.getElementById('n-val').textContent = fmt(res.n);
+    document.getElementById('Q-val').textContent = fmt(res.Q);
+    document.getElementById('U2-val').textContent = fmt(res.U2);
+    document.getElementById('leff-val').textContent = fmt(res.lam_eff);
+    document.getElementById('pw0-val').textContent = fmt(res.p_immediate);
+    const tCheck = res.W + 1 / mu;
+    const diff = Math.abs(tCheck - res.T);
+    document.getElementById('check-val').textContent =
+      `${fmt(tCheck)} (Δ=${diff.toExponential(1)})`;
+
+    drawDistribution(res, L, N, r);
+    drawCurves(lam, mu, L, N, r);
+  } catch (e) {
+    errEl.textContent = '⚠ ' + e.message;
+    errEl.classList.add('show');
+  }
+}
+
+update();
+</script>
+</body>
+</html>
